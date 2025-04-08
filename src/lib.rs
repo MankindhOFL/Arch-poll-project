@@ -41,6 +41,10 @@ pub fn process_instruction(
             msg!("Instruction: Get Results");
             process_get_results(program_id, accounts, poll_id)
         }
+        PollInstruction::GetDetailedResults { poll_id } => {
+            msg!("Instruction: Get Detailed Results");
+            process_get_detailed_results(program_id, accounts, poll_id)
+        }
     }
 }
 
@@ -57,6 +61,9 @@ pub enum PollInstruction {
     GetResults {
         poll_id: u64,
     },
+    GetDetailedResults {
+        poll_id: u64,
+    },
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
@@ -66,6 +73,7 @@ pub struct Poll {
     pub options: Vec<String>,
     pub votes: HashMap<Pubkey, u8>,
     pub total_votes: u64,
+    pub voter_addresses: Vec<Pubkey>,
 }
 
 impl Poll {
@@ -76,6 +84,7 @@ impl Poll {
             options,
             votes: HashMap::new(),
             total_votes: 0,
+            voter_addresses: Vec::new(),
         }
     }
 
@@ -89,6 +98,7 @@ impl Poll {
         }
 
         self.votes.insert(voter, option_index);
+        self.voter_addresses.push(voter);
         self.total_votes += 1;
         Ok(())
     }
@@ -99,6 +109,27 @@ impl Poll {
             results[option_index as usize] += 1;
         }
         results
+    }
+
+    pub fn get_detailed_results(&self) -> (Vec<u64>, Vec<f64>, Vec<Pubkey>) {
+        let mut results = vec![0; self.options.len()];
+        for &option_index in self.votes.values() {
+            results[option_index as usize] += 1;
+        }
+
+        // Calculate percentages
+        let percentages: Vec<f64> = results
+            .iter()
+            .map(|&count| {
+                if self.total_votes > 0 {
+                    (count as f64 / self.total_votes as f64) * 100.0
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+
+        (results, percentages, self.voter_addresses.clone())
     }
 }
 
@@ -172,6 +203,38 @@ fn process_get_results(
     // Calculate results
     let results = poll.get_results();
     msg!("Results: {:?}", results);
+
+    Ok(())
+}
+
+// Add new function for detailed results
+fn process_get_detailed_results(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    poll_id: u64,
+) -> ProgramResult {
+    let account_info_iter = &mut accounts.iter();
+    let poll_account = next_account_info(account_info_iter)?;
+    let requester = next_account_info(account_info_iter)?;
+
+    // Deserialize the poll
+    let poll: Poll = Poll::try_from_slice(&poll_account.data.borrow())?;
+
+    // Verify the requester is the creator
+    if *requester.key != poll.creator {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    // Get detailed results
+    let (results, percentages, voters) = poll.get_detailed_results();
+    
+    msg!("Detailed Results:");
+    msg!("Question: {}", poll.question);
+    for (i, (option, &count, &percentage)) in poll.options.iter().zip(results.iter()).zip(percentages.iter()).enumerate() {
+        msg!("Option {} ({}): {} votes ({:.2}%)", i, option, count, percentage);
+    }
+    msg!("Total Votes: {}", poll.total_votes);
+    msg!("Voter Addresses: {:?}", voters);
 
     Ok(())
 }
