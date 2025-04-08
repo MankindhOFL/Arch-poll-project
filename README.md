@@ -5,10 +5,13 @@ A decentralized polling system built on the Arch Network blockchain. This progra
 ## Features
 
 - Create new polls with custom questions and options
-- Vote on existing polls
-- View poll results
+- Vote on existing polls (one vote per address)
+- View basic poll results (available to all)
+- View detailed poll results (creator only)
+  - Vote counts and percentages
+  - List of all voter addresses
 - Secure and transparent voting system
-- One vote per user per poll
+- Creator-specific features and controls
 
 ## Project Structure
 
@@ -44,12 +47,24 @@ let instruction = PollInstruction::Vote {
 };
 ```
 
-### Getting Results
+### Getting Basic Results (Available to All)
 
 ```rust
 let instruction = PollInstruction::GetResults {
     poll_id: 1,
 };
+```
+
+### Getting Detailed Results (Creator Only)
+
+```rust
+let instruction = PollInstruction::GetDetailedResults {
+    poll_id: 1,
+};
+// Returns:
+// - Vote counts for each option
+// - Percentage of votes for each option
+// - List of all voter addresses
 ```
 
 ## Building
@@ -62,7 +77,9 @@ cargo build
 
 - Each user can only vote once per poll
 - Votes are recorded on the blockchain
-- Results are transparent and verifiable
+- The voter must sign the transaction with their private key
+- Detailed results are only accessible to the poll creator
+- All operations are verified through blockchain signatures
 
 ## License
 
